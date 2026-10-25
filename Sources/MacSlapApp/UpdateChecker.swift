@@ -23,8 +23,8 @@ final class UpdateChecker {
         self.settings = settings
     }
 
-    /// Dev builds have no version to compare, so they never check.
-    var isEnabled: Bool { AppInfo.isBundled && VersionComparison.components(AppInfo.version) != nil }
+    /// Fork builds are updated from source until this fork publishes releases.
+    var isEnabled: Bool { false } // Keep the microphone edition on this fork.
 
     func start() {
         guard isEnabled else { return }
@@ -47,8 +47,8 @@ final class UpdateChecker {
     func check(userInitiated: Bool) async {
         guard isEnabled, !isChecking else {
             if userInitiated && !isEnabled {
-                showAlert(title: "Updates are checked in release builds",
-                          message: "This copy was built from source (version \(AppInfo.version)).")
+                showAlert(title: "Custom M1 build",
+                          message: "This fork includes microphone detection. Pull the latest changes from Mo-Shakib/MacSlapApp and rebuild to update.")
             }
             return
         }

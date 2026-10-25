@@ -10,6 +10,10 @@ final class SlapController {
     let library: SoundLibrary
     let audioPlayer: AudioPlayer
     let accelerometer = AccelerometerReader()
+    let microphone = MicrophoneReader()
+    private let hasMotionSensor = AccelerometerReader.isAvailable
+    private var resumeTimer: Timer?
+    private var suppressMicrophoneUntil = 0.0
     let usbMonitor = USBMonitor()
     let screenFlash = ScreenFlash()
     let screenShaker = ScreenShaker()
@@ -53,6 +57,22 @@ final class SlapController {
             self?.onStateChange?()
         }
 
+        microphone.sensitivity = settings.sensitivity
+        microphone.onStateChange = { [weak self] in self?.onStateChange?() }
+        microphone.shouldSuppress = { [weak self] in
+            guard let self else { return true }
+            if self.audioPlayer.isPlaying {
+                self.suppressMicrophoneUntil = ProcessInfo.processInfo.systemUptime + 0.4
+                return true
+            }
+            return !self.isActive || ProcessInfo.processInfo.systemUptime < self.suppressMicrophoneUntil
+        }
+        microphone.onTap = { [weak self] intensity in
+            let event = SlapEvent(magnitude: 0, intensity: intensity, severity: .microShock,
+                                  sources: ["microphone"])
+            self?.handleSlap(event, isTest: false)
+        }
+
         usbMonitor.onUSBEvent = { [weak self] in
             guard let self, self.settings.usbMoanerEnabled, self.isActive else { return }
             self.audioPlayer.playRandom(baseVolume: self.settings.volume)
@@ -62,11 +82,37 @@ final class SlapController {
     /// Enabled and not snoozed.
     var isActive: Bool { settings.isEnabled && !settings.isSnoozed }
 
-    func start() {
-        if settings.isEnabled {
-            accelerometer.start()
+    var usesMicrophone: Bool {
+        settings.detectionSource == .microphone
+            || (settings.detectionSource == .automatic && !hasMotionSensor)
+    }
+
+    var detectionStatus: String {
+        usesMicrophone ? microphone.status : accelerometer.status.menuDescription
+    }
+
+    func selectDetectionSource(_ source: DetectionSource) {
+        accelerometer.stop()
+        microphone.stop()
+        settings.detectionSource = source
+        syncDetection()
+        onStateChange?()
+    }
+
+    private func syncDetection() {
+        if isActive {
+            if usesMicrophone { microphone.start() } else { accelerometer.start() }
         } else {
-            log("Starting disabled — sensor stays off until re-enabled")
+            microphone.stop()
+            accelerometer.stop()
+        }
+    }
+
+    func start() {
+        syncDetection()
+        // Snoozing releases the microphone; resume automatically when it expires.
+        resumeTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.syncDetection() }
         }
         if settings.usbMoanerEnabled {
             usbMonitor.start()
@@ -74,6 +120,9 @@ final class SlapController {
     }
 
     func shutdown() {
+        resumeTimer?.invalidate()
+        resumeTimer = nil
+        microphone.stop()
         accelerometer.stop()
         usbMonitor.stop()
         hapticFeedback.shutdown()
@@ -81,11 +130,7 @@ final class SlapController {
 
     func setEnabled(_ enabled: Bool) {
         settings.isEnabled = enabled
-        if enabled {
-            accelerometer.start()
-        } else {
-            accelerometer.stop()
-        }
+        syncDetection()
     }
 
     func setUSBMoaner(_ enabled: Bool) {
@@ -95,11 +140,13 @@ final class SlapController {
 
     func snooze(_ option: SnoozeOption) {
         settings.snoozeUntil = option.endDate()
+        syncDetection()
         log("Snoozed until \(settings.snoozeUntil!)")
     }
 
     func resumeFromSnooze() {
         settings.snoozeUntil = nil
+        syncDetection()
     }
 
     func selectVoicePack(_ pack: VoicePack) {
@@ -121,6 +168,7 @@ final class SlapController {
 
     func updateDetectorConfig() {
         detector.updateConfig(settings.sensitivity.detectorConfig)
+        microphone.sensitivity = settings.sensitivity
     }
 
     /// Slider values are 0...1 and map to multipliers of 0...2.
@@ -146,6 +194,9 @@ final class SlapController {
             lastSlapTime = now
         }
 
+        // Cover playback startup latency and haptics, then extend this while
+        // speech or clips are playing and for a short acoustic tail afterwards.
+        suppressMicrophoneUntil = ProcessInfo.processInfo.systemUptime + 0.6
         audioPlayer.play(
             intensity: event.intensity,
             dynamicVolume: settings.dynamicVolume,
@@ -165,11 +216,14 @@ final class SlapController {
         }
 
         if !isTest {
-            settings.recordSlap(magnitude: event.magnitude)
+            settings.recordSlap(magnitude: event.sources.contains("microphone") ? 0 : event.magnitude)
         }
         onSlap?(event)
 
-        log("\(isTest ? "TEST" : event.severity.rawValue) amp=\(String(format: "%.3f", event.magnitude))g " +
+        let measurement = event.sources.contains("microphone")
+            ? "acoustic intensity=\(String(format: "%.2f", event.intensity))"
+            : "amp=\(String(format: "%.3f", event.magnitude))g"
+        log("\(isTest ? "TEST" : event.severity.rawValue) \(measurement) " +
             "vol=\(String(format: "%.0f%%", event.intensity * 100)) " +
             "detectors=\(event.sources.sorted().joined(separator: "+")) " +
             "total=\(settings.totalSlapCount)")

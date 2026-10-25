@@ -1,5 +1,5 @@
 APP_NAME   := MacSlapApp
-VERSION    := 3.0.0
+VERSION    := 3.0.0-m1
 BUILD      := $(shell git rev-list --count HEAD 2>/dev/null || echo 1)
 
 DIST       := dist

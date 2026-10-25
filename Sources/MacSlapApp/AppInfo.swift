@@ -3,7 +3,7 @@ import Foundation
 enum AppInfo {
     static let name = "MacSlapApp"
     static let bundleIdentifier = "app.macslap.MacSlapApp"
-    static let githubRepo = "AbdullahFID/MacSlapApp"
+    static let githubRepo = "Mo-Shakib/MacSlapApp"
     static let repoURL = URL(string: "https://github.com/\(githubRepo)")!
     static let releasesURL = URL(string: "https://github.com/\(githubRepo)/releases")!
     static let websiteURL = URL(string: "https://macslap.app")!
