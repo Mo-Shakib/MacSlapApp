@@ -1,37 +1,77 @@
-# MacSlapApp
+# MacSlapApp — M1 microphone edition
+
+This fork adds **microphone tap detection for base M1 Macs**. Automatic mode
+uses the motion sensor when available and otherwise uses the default microphone.
+Requires macOS 14 or newer and Swift 6 to build.
+
+Based on [AbdullahFID/MacSlapApp](https://github.com/AbdullahFID/MacSlapApp),
+with the original motion detection, voice packs and effects preserved.
+
+## Run this M1 version
+
+1. Run `make app` in this folder, then open `dist/MacSlapApp.app` in Finder.
+2. Allow microphone access when macOS asks. Click the 👋 menu bar icon.
+3. Choose **Detection → Microphone (M1 compatible)** to force acoustic detection,
+   or leave **Automatic** selected for hardware-based selection.
+4. In System Settings → Sound → Input, select the MacBook's built-in microphone.
+   Keep the room quiet for a second, then try a light tap on the palm rest.
+5. Use **Sensitivity** to tune detection. **Test Slap** checks sounds/effects
+   without requiring a tap or microphone access.
+
+If permission was denied, use **Microphone Settings…** in the menu, allow
+MacSlapApp, then use **Retry Microphone** (or quit and reopen). Retry also
+reconnects a missing input after changing Sound settings. Sleep/wake and audio
+configuration changes restart capture automatically. **Enabled** and **Snooze**
+release the microphone while paused; snoozing resumes when its timer expires.
+
+Audio stays in memory on this Mac: no recordings are saved, speech is not
+transcribed, and audio is not uploaded. The detector measures short-window
+amplitude, background level, and sudden onsets. Playback/effects suppress capture
+measurements to prevent feedback; taps during a voice response are intentionally
+ignored. This is an acoustic heuristic: loud typing, claps, or music can still
+trigger it, and microphone placement/input processing affects sensitivity.
+Microphone taps increment counts but do not claim acceleration measurements in g.
+
+Built-in Robot Voice works without downloaded sound files. Existing voice packs,
+volume, haptics and screen effects are preserved. This custom build disables
+upstream update checks because official downloads may lack the M1 changes.
+`make test` runs detector tests; `make app` builds an ad-hoc signed arm64 app on
+Apple Silicon. Builds aren't notarized. Physical detection still needs testing
+with your microphone and room; synthetic tests cannot establish real tap accuracy.
+
+The original feature documentation follows, with installation instructions
+adjusted for this fork. Motion-sensor details describe accelerometer mode.
+
+---
 
 Slap your MacBook and it screams back. Free, open source, no license keys.
 
 Built by reverse-engineering [SlapMac](https://slapmac.com/) and studying [taigrr/spank](https://github.com/taigrr/spank), then rewritten from scratch in Swift with extra features on top: trackpad haptics, screen shake, backlight flashes, combo announcers, and a USB moaner.
 
-Website: [macslap.app](https://macslap.app)
+Original project website: [macslap.app](https://macslap.app)
 
 ## Quick Start
 
-**Download (no Xcode needed):** grab the latest zip from [Releases](../../releases), unzip it, and run:
+Build this fork from source (Xcode 16 or newer / Swift 6 required):
 
-```bash
-cd MacSlapApp-v3.0.0
-./install.sh
-```
-
-**Build from source:**
-
-```bash
-git clone https://github.com/AbdullahFID/MacSlapApp.git
+```sh
+git clone https://github.com/Mo-Shakib/MacSlapApp.git
 cd MacSlapApp
-make install
+make app
+open dist/MacSlapApp.app
 ```
 
-> **Not comfortable with git?** Click the green **Code** button → **Download ZIP**, unzip it, open Terminal, drag the folder into the Terminal window to `cd` into it, and run `make install`.
+To install it in Applications and enable Launch at Login, run `make install`.
 
-Either way, `MacSlapApp.app` lands in `/Applications`, adds itself to Login Items, and a 👋 appears in your menu bar. Slap your MacBook.
+> Without git, use **Code → Download ZIP**, extract the folder, open Terminal
+> there, and run `make app`. Then open `dist/MacSlapApp.app`.
 
 It works immediately with the built-in **Robot Voice** pack — no sound files required. Add your own sounds for the other packs (see [Sounds](#sounds)).
 
 ## Requirements
 
-- An Apple Silicon **MacBook** (M1 Pro and M2 or later — desktops have no accelerometer)
+- **Microphone mode:** a Mac with a working audio input, including base M1 Macs.
+- **Motion-sensor mode:** a compatible Apple Silicon MacBook (M1 Pro and M2 or later).
 - macOS 14 Sonoma or newer. Tested on macOS 27 Golden Gate (M5 MacBook Pro).
 - To build from source: Xcode 16 or newer (Swift 6 toolchain)
 
@@ -48,6 +88,16 @@ It works immediately with the built-in **Robot Voice** pack — no sound files r
 
 ## Sounds
 
+To use your own audio:
+
+1. Open **👋 → Voice Pack → Open Sounds Folder**, or use **Choose Sounds Folder…**.
+2. Copy clips directly into that folder (subfolders are not scanned).
+3. Rename them for a pack, for example `male_01.mp3` and `male_02.wav`.
+4. Choose **Reload Sounds**, select the matching pack (here, **Male**), and click **Test Slap**.
+
+Pack names are categories; your custom clips can contain any sound. Short clips
+work best for quick reactions. Renaming a file extension does not convert audio.
+
 Sound files are matched by filename prefix:
 
 | Prefix | Voice Pack |
@@ -61,7 +111,7 @@ Sound files are matched by filename prefix:
 | `goat_` | Goat |
 | `1_` … `9_` | Combo announcer, one tier per number |
 
-Examples: `sexy_01.mp3`, `punch_5.wav`, `goat_scream.m4a`, `3_1.mp3`. Supported formats: mp3, wav, m4a, aac, aiff, caf.
+Examples: `sexy_01.mp3`, `punch_5.wav`, `goat_scream.m4a`, `3_1.mp3`. Supported formats: mp3, wav, m4a, aac, aiff, aif, caf.
 
 Where MacSlapApp looks, in order:
 
@@ -88,6 +138,7 @@ Click the 👋 in your menu bar (it flashes 💥 on every slap and shows 💤 wh
 
 ```
  Sensor: Live (805 Hz)
+ Detection: Automatic           → Automatic, Microphone, Motion Sensor
  Slaps: 1,234  ·  Today: 12  ·  Hardest: 3.2 g
  ─────────
  Enabled
@@ -123,7 +174,8 @@ Everything persists between launches. **Test Slap** fires every enabled effect s
 
 ## Permissions
 
-- **Slap detection, sounds, haptics, brightness, USB:** no permissions needed.
+- **Microphone tap detection:** needs Microphone permission. Audio stays local.
+- **Motion detection, sounds, haptics, brightness, USB:** no permissions needed.
 - **Screen Shake:** needs Screen Recording (it captures the screen to shake it). Turning it on asks once; if macOS doesn't prompt, use **Allow Screen Recording…** in the menu and add MacSlapApp under System Settings → Privacy & Security → Screen & System Audio Recording.
 
 ## How Detection Works
@@ -165,7 +217,7 @@ Private frameworks are loaded at runtime with `dlopen`, so if Apple moves one th
 Start with the first line of the menu (sensor status) and the log: **Help → Open Log File** (`~/Library/Logs/MacSlapApp/MacSlapApp.log`).
 
 **"Sensor: No motion sensor"**
-- You need an Apple Silicon MacBook. iMac, Mac mini, Mac Studio and Mac Pro don't have an accelerometer, and neither do base M1 machines.
+- Select **Detection → Automatic** or **Microphone** for base M1 Macs and other machines without a motion sensor. Microphone mode requires audio-input access.
 
 **"Sensor: Reconnecting…" that never goes Live**
 - Quit and reopen MacSlapApp. If it persists, the log says why the device couldn't be opened.
@@ -206,7 +258,8 @@ make release    # tests, then dist/MacSlapApp-vX.Y.Z.zip for GitHub Releases
 make icon       # regenerate Resources/AppIcon.icns
 ```
 
-Bump `VERSION` in the `Makefile` when cutting a release; the update checker compares it with the latest GitHub release tag.
+Bump `VERSION` in the `Makefile` when cutting a release. Automatic update checks
+are disabled in this microphone edition; update from this fork and rebuild.
 
 ```
 Sources/
